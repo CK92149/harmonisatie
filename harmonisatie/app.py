@@ -4,21 +4,21 @@ from PyPDF2 import PdfReader
 from openai import OpenAI
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
+import tempfile
 
 # Load environment variables
 load_dotenv()
 
 # Initialize OpenAI client
-client = OpenAI()  # Het zal automatisch de OPENAI_API_KEY environment variable gebruiken
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
+client = OpenAI(api_key=api_key)
 
 # Set the correct template folder path
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
 app = Flask(__name__, template_folder=template_dir)
-app.config['UPLOAD_FOLDER'] = '/tmp'  # Verander naar /tmp voor Vercel
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-
-# Create uploads directory if it doesn't exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 def extract_text_from_pdf(pdf_path):
     """Extract text from a PDF file."""
@@ -59,34 +59,30 @@ def upload_file():
         return jsonify({'error': 'Both files must be PDFs'})
     
     try:
-        # Save both files
-        filename1 = secure_filename(file1.filename)
-        filename2 = secure_filename(file2.filename)
-        filepath1 = os.path.join(app.config['UPLOAD_FOLDER'], filename1)
-        filepath2 = os.path.join(app.config['UPLOAD_FOLDER'], filename2)
-        
-        file1.save(filepath1)
-        file2.save(filepath2)
-        
-        # Extract text from both PDFs
-        text1 = extract_text_from_pdf(filepath1)
-        text2 = extract_text_from_pdf(filepath2)
-        
-        # Generate comparison only
-        comparison = compare_texts(text1, text2)
-        
-        # Clean up - delete the uploaded files
-        os.remove(filepath1)
-        os.remove(filepath2)
-        
-        return jsonify({
-            'comparison': comparison
-        })
-        
+        # Create temporary files
+        with tempfile.NamedTemporaryFile(delete=False) as temp1, tempfile.NamedTemporaryFile(delete=False) as temp2:
+            file1.save(temp1.name)
+            file2.save(temp2.name)
+            
+            # Extract text from both PDFs
+            text1 = extract_text_from_pdf(temp1.name)
+            text2 = extract_text_from_pdf(temp2.name)
+            
+            # Clean up temporary files
+            os.unlink(temp1.name)
+            os.unlink(temp2.name)
+            
+            # Generate comparison
+            comparison = compare_texts(text1, text2)
+            
+            return jsonify({
+                'comparison': comparison
+            })
+            
     except Exception as e:
-        # Clean up in case of error
-        if os.path.exists(filepath1):
-            os.remove(filepath1)
-        if os.path.exists(filepath2):
-            os.remove(filepath2)
-        return jsonify({'error': str(e)}) 
+        return jsonify({'error': str(e)})
+
+# For local development
+if __name__ == '__main__':
+    print("Starting Flask application...")
+    app.run(debug=True, port=5000) 
