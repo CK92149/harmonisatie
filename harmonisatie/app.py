@@ -9,7 +9,10 @@ from werkzeug.utils import secure_filename
 load_dotenv()
 
 # Initialize OpenAI client
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
+client = OpenAI(api_key=api_key)
 
 # Set the correct template folder path
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
