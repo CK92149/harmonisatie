@@ -15,11 +15,13 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
 
-# Configure httpx client
-http_client = httpx.Client()
+# Configure httpx client with timeout
+timeout = httpx.Timeout(30.0, connect=30.0)
+http_client = httpx.Client(timeout=timeout)
 client = OpenAI(
     api_key=api_key,
-    http_client=http_client
+    http_client=http_client,
+    max_retries=3
 )
 
 # Set the correct template folder path
