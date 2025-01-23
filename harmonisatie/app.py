@@ -15,13 +15,23 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
 
-# Configure httpx client with timeout
-timeout = httpx.Timeout(30.0, connect=30.0)
-http_client = httpx.Client(timeout=timeout)
+# Configure httpx client with longer timeout and keep-alive
+timeout = httpx.Timeout(60.0, connect=30.0)
+transport = httpx.HTTPTransport(retries=3)
+http_client = httpx.Client(
+    timeout=timeout,
+    transport=transport,
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+)
+
 client = OpenAI(
     api_key=api_key,
     http_client=http_client,
-    max_retries=3
+    max_retries=5,
+    timeout=60.0
 )
 
 # Set the correct template folder path
@@ -45,7 +55,8 @@ def compare_texts(text1, text2):
             messages=[
                 {"role": "system", "content": "Vergelijk de verschillen tussen de protocollen van Den Haag en Zoetermeer. opmaak is onbelangrijk. het gaat om de inhoud"},
                 {"role": "user", "content": f"Hier volgen de protocollen:\n\nProtocollen Den Haag:\n{text1}\n\nProtocollen Zoetermeer:\n{text2}"}
-            ]
+            ],
+            timeout=60.0
         )
         return completion.choices[0].message.content
     except Exception as e:
