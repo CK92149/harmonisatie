@@ -5,6 +5,7 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 import tempfile
+import httpx
 
 # Load environment variables
 load_dotenv()
@@ -13,7 +14,13 @@ load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
-client = OpenAI(api_key=api_key)
+
+# Configure httpx client without proxies
+http_client = httpx.Client(proxies=None)
+client = OpenAI(
+    api_key=api_key,
+    http_client=http_client
+)
 
 # Set the correct template folder path
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
@@ -30,15 +37,18 @@ def extract_text_from_pdf(pdf_path):
 
 def compare_texts(text1, text2):
     """Compare two texts using OpenAI API."""
-    completion = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "Vergelijk de verschillen tussen de protocollen van Den Haag en Zoetermeer. opmaak is onbelangrijk. het gaat om de inhoud"},
-            {"role": "user", "content": f"Hier volgen de protocollen:\n\nProtocollen Den Haag:\n{text1}\n\nProtocollen Zoetermeer:\n{text2}"}
-        ]
-    )
-    
-    return completion.choices[0].message.content
+    try:
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "Vergelijk de verschillen tussen de protocollen van Den Haag en Zoetermeer. opmaak is onbelangrijk. het gaat om de inhoud"},
+                {"role": "user", "content": f"Hier volgen de protocollen:\n\nProtocollen Den Haag:\n{text1}\n\nProtocollen Zoetermeer:\n{text2}"}
+            ]
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        print(f"Error in compare_texts: {str(e)}")
+        raise
 
 @app.route('/')
 def index():
@@ -81,6 +91,12 @@ def upload_file():
             
     except Exception as e:
         return jsonify({'error': str(e)})
+
+# Cleanup when the application exits
+@app.teardown_appcontext
+def cleanup(error):
+    if http_client:
+        http_client.close()
 
 # For local development
 if __name__ == '__main__':
