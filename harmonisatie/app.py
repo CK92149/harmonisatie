@@ -12,7 +12,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = '/tmp'  # Verander naar /tmp voor Vercel
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Create uploads directory if it doesn't exist
@@ -87,7 +87,4 @@ def upload_file():
             os.remove(filepath1)
         if os.path.exists(filepath2):
             os.remove(filepath2)
-        return jsonify({'error': str(e)})
-
-if __name__ == '__main__':
-    app.run(debug=True) 
+        return jsonify({'error': str(e)}) 
