@@ -5,8 +5,8 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 import tempfile
-import httpx
 import traceback
+import json
 
 # Load environment variables
 load_dotenv()
@@ -16,20 +16,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
 
-# Configure httpx client with longer timeout and keep-alive
-timeout = httpx.Timeout(60.0, connect=30.0)
-transport = httpx.HTTPTransport(retries=3)
-http_client = httpx.Client(
-    timeout=timeout,
-    transport=transport
-)
-
-client = OpenAI(
-    api_key=api_key,
-    http_client=http_client,
-    max_retries=5,
-    timeout=60.0
-)
+client = OpenAI(api_key=api_key)
 
 # Set the correct template folder path
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
@@ -56,14 +43,30 @@ def compare_texts(text1, text2):
             messages=[
                 {"role": "system", "content": "Vergelijk de verschillen tussen de protocollen van Den Haag en Zoetermeer. opmaak is onbelangrijk. het gaat om de inhoud"},
                 {"role": "user", "content": f"Hier volgen de protocollen:\n\nProtocollen Den Haag:\n{text1}\n\nProtocollen Zoetermeer:\n{text2}"}
-            ],
-            timeout=60.0
+            ]
         )
-        return completion.choices[0].message.content
+        
+        # Ensure we get a valid response
+        if not completion or not completion.choices or not completion.choices[0].message:
+            raise Exception("Invalid response from OpenAI API")
+            
+        response_text = completion.choices[0].message.content
+        if not response_text:
+            raise Exception("Empty response from OpenAI API")
+            
+        return response_text
+        
     except Exception as e:
-        print(f"Error in compare_texts: {str(e)}")
+        error_msg = str(e)
+        print(f"Error in compare_texts: {error_msg}")
         print(traceback.format_exc())
-        raise Exception("Error comparing texts")
+        
+        # Ensure we return a valid JSON-serializable error message
+        try:
+            json.dumps({'error': error_msg})
+            raise Exception(error_msg)
+        except:
+            raise Exception("Error comparing texts")
 
 @app.route('/')
 def index():
@@ -97,13 +100,21 @@ def upload_file():
                 # Generate comparison
                 comparison = compare_texts(text1, text2)
                 
-                return jsonify({
-                    'comparison': comparison
-                })
+                # Ensure the response is JSON serializable
+                response = {'comparison': comparison}
+                try:
+                    json.dumps(response)
+                    return jsonify(response)
+                except:
+                    return jsonify({'error': 'Invalid response format'}), 500
+                    
             except Exception as e:
-                return jsonify({
-                    'error': str(e)
-                }), 500
+                error_msg = str(e)
+                try:
+                    json.dumps({'error': error_msg})
+                    return jsonify({'error': error_msg}), 500
+                except:
+                    return jsonify({'error': 'An unexpected error occurred'}), 500
             finally:
                 # Clean up temporary files
                 try:
@@ -118,12 +129,6 @@ def upload_file():
         return jsonify({
             'error': 'An unexpected error occurred'
         }), 500
-
-# Cleanup when the application exits
-@app.teardown_appcontext
-def cleanup(error):
-    if http_client:
-        http_client.close()
 
 # For local development
 if __name__ == '__main__':
