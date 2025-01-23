@@ -5,7 +5,6 @@ from openai import OpenAI
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 import tempfile
-import httpx
 
 # Load environment variables
 load_dotenv()
@@ -15,12 +14,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise ValueError("No OpenAI API key found. Please set OPENAI_API_KEY environment variable.")
 
-# Configure httpx client without proxies
-http_client = httpx.Client(proxies=None)
-client = OpenAI(
-    api_key=api_key,
-    http_client=http_client
-)
+client = OpenAI(api_key=api_key)
 
 # Set the correct template folder path
 template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'templates'))
@@ -91,12 +85,6 @@ def upload_file():
             
     except Exception as e:
         return jsonify({'error': str(e)})
-
-# Cleanup when the application exits
-@app.teardown_appcontext
-def cleanup(error):
-    if http_client:
-        http_client.close()
 
 # For local development
 if __name__ == '__main__':
